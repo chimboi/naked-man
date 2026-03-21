@@ -14,6 +14,7 @@ export type GamePhase =
   | 'guess'
   | 'waiting-for-guesses'
   | 'result'
+  | 'personal-result'
   | 'scoreboard'
   | 'winner';
 

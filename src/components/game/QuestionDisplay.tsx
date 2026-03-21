@@ -1,16 +1,29 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+
+const TIME_LIMIT = 15;
 
 interface QuestionDisplayProps {
   question: string;
   questionNumber: number;
   onSubmit: (answer: string) => void;
+  onTimeout: () => void;
 }
 
-export default function QuestionDisplay({ question, questionNumber, onSubmit }: QuestionDisplayProps) {
+export default function QuestionDisplay({ question, questionNumber, onSubmit, onTimeout }: QuestionDisplayProps) {
   const [answer, setAnswer] = useState('');
+  const [timeLeft, setTimeLeft] = useState(TIME_LIMIT);
+
+  useEffect(() => {
+    if (timeLeft <= 0) {
+      onTimeout();
+      return;
+    }
+    const timer = setTimeout(() => setTimeLeft(t => t - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [timeLeft, onTimeout]);
 
   const handleSubmit = () => {
     if (!answer.trim()) return;
@@ -24,9 +37,26 @@ export default function QuestionDisplay({ question, questionNumber, onSubmit }: 
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', damping: 20 }}
     >
-      <span className="text-sm font-medium text-orange bg-orange/10 px-3 py-1 rounded-full mb-4">
-        Ronda {questionNumber}
-      </span>
+      <div className="flex items-center gap-3 mb-4">
+        <span className="text-sm font-medium text-orange bg-orange/10 px-3 py-1 rounded-full">
+          Ronda {questionNumber}
+        </span>
+        <span className={`text-sm font-bold px-3 py-1 rounded-full ${
+          timeLeft <= 5 ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'
+        }`}>
+          {timeLeft}s
+        </span>
+      </div>
+
+      {/* Timer bar */}
+      <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden mb-6">
+        <motion.div
+          className={`h-full rounded-full ${timeLeft <= 5 ? 'bg-red-500' : 'bg-orange'}`}
+          initial={{ width: '100%' }}
+          animate={{ width: '0%' }}
+          transition={{ duration: TIME_LIMIT, ease: 'linear' }}
+        />
+      </div>
 
       <motion.h2
         className="text-2xl font-bold text-gray-900 text-center mb-8 leading-relaxed"
@@ -41,9 +71,9 @@ export default function QuestionDisplay({ question, questionNumber, onSubmit }: 
         value={answer}
         onChange={(e) => setAnswer(e.target.value)}
         placeholder="Escribe tu respuesta..."
-        rows={4}
+        rows={3}
         maxLength={300}
-        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-gray-900 focus:border-orange focus:outline-none transition-colors resize-none mb-4"
+        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-gray-900 focus:border-orange focus:outline-none transition-colors resize-none mb-2"
         autoFocus
       />
 

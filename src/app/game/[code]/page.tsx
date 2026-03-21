@@ -5,16 +5,26 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { pickRandomQuestion, pickRandomPlayer, calculateScore } from '@/lib/utils';
 import { questions } from '@/data/questions';
-import type { GameState, GamePhase } from '@/types/game';
+import type { GameState } from '@/types/game';
 import NakedManReveal from '@/components/game/NakedManReveal';
 import QuestionDisplay from '@/components/game/QuestionDisplay';
 import WaitingScreen from '@/components/game/WaitingScreen';
 import AnswerReveal from '@/components/game/AnswerReveal';
 import GuessScreen from '@/components/game/GuessScreen';
-import RoundResult from '@/components/game/RoundResult';
+import PersonalResult from '@/components/game/PersonalResult';
 import Scoreboard from '@/components/game/Scoreboard';
 
 const POLL_INTERVAL = 1000;
+
+function ResultAutoAdvance({ isHost, onAdvance }: { isHost: boolean; onAdvance: () => void }) {
+  useEffect(() => {
+    if (!isHost) return;
+    const timer = setTimeout(onAdvance, 500);
+    return () => clearTimeout(timer);
+  }, [isHost, onAdvance]);
+
+  return null;
+}
 
 export default function GamePage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
@@ -88,7 +98,6 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
 
   // Helper: save state to DB and update local
   const saveState = useCallback(async (newState: GameState) => {
-    // Block polling from overwriting during write
     writeCooldown.current = true;
 
     const stateStr = JSON.stringify(newState);
@@ -100,7 +109,6 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       .update({ state: newState })
       .eq('id', code);
 
-    // Release cooldown after DB has updated
     setTimeout(() => { writeCooldown.current = false; }, 1500);
   }, [code]);
 
@@ -119,7 +127,7 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       phase: 'reveal',
       currentAnswer: '',
       guesses: {},
-      roundQuestionCount: 1,
+      roundQuestionCount: gameState.currentRound + 1,
       currentRound: gameState.currentRound + 1,
     });
   }, [gameState, saveState]);
@@ -133,6 +141,12 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
     if (!gameState) return;
     saveState({ ...gameState, currentAnswer: answer, phase: 'answer-reveal' });
   }, [gameState, saveState]);
+
+  const handleTimeout = useCallback(() => {
+    if (!gameState || !isNakedMan) return;
+    // Skip this round — go directly to next round
+    saveState({ ...gameState, phase: 'scoreboard', currentAnswer: '' });
+  }, [gameState, saveState, isNakedMan]);
 
   const handleProceedToGuess = useCallback(() => {
     if (!gameState) return;
@@ -161,7 +175,8 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
     });
   }, [gameState, saveState, playerId, code]);
 
-  const handleNextFromResult = useCallback(() => {
+  // result → personal-result (calculate scores first)
+  const handleShowPersonalResult = useCallback(() => {
     if (!gameState) return;
 
     const { nakedManPoints, correctGuessers } = calculateScore(gameState.guesses, gameState.nakedManId!);
@@ -173,13 +188,18 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       return { ...p, score: p.score + bonus };
     });
 
-    const winner = updatedPlayers.find(p => p.score >= 5);
-    if (winner) {
-      saveState({ ...gameState, players: updatedPlayers, phase: 'winner' });
-      return;
-    }
+    saveState({ ...gameState, players: updatedPlayers, phase: 'personal-result' });
+  }, [gameState, saveState]);
 
-    saveState({ ...gameState, players: updatedPlayers, phase: 'scoreboard' });
+  // personal-result → scoreboard or winner
+  const handleShowScoreboard = useCallback(() => {
+    if (!gameState) return;
+    const winner = gameState.players.find(p => p.score >= 5);
+    if (winner) {
+      saveState({ ...gameState, phase: 'winner' });
+    } else {
+      saveState({ ...gameState, phase: 'scoreboard' });
+    }
   }, [gameState, saveState]);
 
   const handlePlayAgain = useCallback(() => {
@@ -232,6 +252,7 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
           question={questions[gameState.currentQuestionIndex]}
           questionNumber={gameState.roundQuestionCount}
           onSubmit={handleAnswerSubmit}
+          onTimeout={handleTimeout}
         />
       )}
 
@@ -263,11 +284,16 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       )}
 
       {phase === 'result' && (
-        <RoundResult
+        <ResultAutoAdvance isHost={isHost} onAdvance={handleShowPersonalResult} />
+      )}
+
+      {phase === 'personal-result' && (
+        <PersonalResult
           players={gameState.players}
           nakedManId={gameState.nakedManId!}
+          playerId={playerId}
           guesses={gameState.guesses}
-          onNext={isHost ? handleNextFromResult : undefined}
+          onNext={isHost ? handleShowScoreboard : undefined}
         />
       )}
 
