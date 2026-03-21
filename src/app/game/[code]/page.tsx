@@ -11,6 +11,7 @@ import QuestionDisplay from '@/components/game/QuestionDisplay';
 import WaitingScreen from '@/components/game/WaitingScreen';
 import AnswerReveal from '@/components/game/AnswerReveal';
 import GuessScreen from '@/components/game/GuessScreen';
+import DrawingCanvas from '@/components/game/DrawingCanvas';
 import PersonalResult from '@/components/game/PersonalResult';
 import Scoreboard from '@/components/game/Scoreboard';
 
@@ -19,7 +20,8 @@ const POLL_INTERVAL = 1000;
 function ResultAutoAdvance({ isHost, onAdvance }: { isHost: boolean; onAdvance: () => void }) {
   useEffect(() => {
     if (!isHost) return;
-    const timer = setTimeout(onAdvance, 500);
+    // Immediate — no delay needed, just trigger on next tick
+    const timer = setTimeout(onAdvance, 100);
     return () => clearTimeout(timer);
   }, [isHost, onAdvance]);
 
@@ -109,7 +111,8 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       .update({ state: newState })
       .eq('id', code);
 
-    setTimeout(() => { writeCooldown.current = false; }, 1500);
+    // Short cooldown — just enough for the write to propagate
+    setTimeout(() => { writeCooldown.current = false; }, 300);
   }, [code]);
 
   const startRound = useCallback(() => {
@@ -247,9 +250,18 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
         />
       )}
 
-      {phase === 'question' && isNakedMan && (
+      {phase === 'question' && isNakedMan && questions[gameState.currentQuestionIndex].type === 'text' && (
         <QuestionDisplay
-          question={questions[gameState.currentQuestionIndex]}
+          question={questions[gameState.currentQuestionIndex].text}
+          questionNumber={gameState.roundQuestionCount}
+          onSubmit={handleAnswerSubmit}
+          onTimeout={handleTimeout}
+        />
+      )}
+
+      {phase === 'question' && isNakedMan && questions[gameState.currentQuestionIndex].type === 'drawing' && (
+        <DrawingCanvas
+          question={questions[gameState.currentQuestionIndex].text}
           questionNumber={gameState.roundQuestionCount}
           onSubmit={handleAnswerSubmit}
           onTimeout={handleTimeout}
@@ -262,7 +274,7 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
 
       {phase === 'answer-reveal' && (
         <AnswerReveal
-          question={questions[gameState.currentQuestionIndex]}
+          question={questions[gameState.currentQuestionIndex].text}
           answer={gameState.currentAnswer}
           questionNumber={gameState.roundQuestionCount}
           onProceed={handleProceedToGuess}
@@ -273,7 +285,7 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       {phase === 'guess' && !isNakedMan && !gameState.guesses[playerId] && (
         <GuessScreen
           players={gameState.players.filter(p => p.id !== playerId)}
-          question={questions[gameState.currentQuestionIndex]}
+          question={questions[gameState.currentQuestionIndex].text}
           answer={gameState.currentAnswer}
           onGuess={handleGuessSubmit}
         />

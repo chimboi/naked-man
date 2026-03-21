@@ -11,11 +11,12 @@ interface AnswerRevealProps {
   isHost: boolean;
 }
 
+const isDrawing = (answer: string) => answer.startsWith('data:image');
+
 export default function AnswerReveal({ question, answer, questionNumber, onProceed, isHost }: AnswerRevealProps) {
-  // Auto-advance to guess phase after 5 seconds (host only writes)
   useEffect(() => {
     if (!isHost) return;
-    const timer = setTimeout(onProceed, 5000);
+    const timer = setTimeout(onProceed, 4000);
     return () => clearTimeout(timer);
   }, [isHost, onProceed]);
 
@@ -44,27 +45,30 @@ export default function AnswerReveal({ question, answer, questionNumber, onProce
       </h2>
 
       <motion.div
-        className="w-full bg-orange/5 border-2 border-orange/20 rounded-2xl p-6 mb-6"
+        className="w-full bg-orange/5 border-2 border-orange/20 rounded-2xl overflow-hidden mb-6"
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ delay: 0.2, type: 'spring' }}
       >
-        <p className="text-lg text-gray-800 leading-relaxed italic">
-          &ldquo;{answer}&rdquo;
-        </p>
+        {isDrawing(answer) ? (
+          <img src={answer} alt="Dibujo del Naked Man" className="w-full" />
+        ) : (
+          <p className="text-lg text-gray-800 leading-relaxed italic p-6">
+            &ldquo;{answer}&rdquo;
+          </p>
+        )}
       </motion.div>
 
       <p className="text-gray-500 text-sm mb-4">
         Preparense para adivinar...
       </p>
 
-      {/* Countdown bar */}
       <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
         <motion.div
           className="h-full bg-orange rounded-full"
           initial={{ width: '100%' }}
           animate={{ width: '0%' }}
-          transition={{ duration: 5, ease: 'linear' }}
+          transition={{ duration: 4, ease: 'linear' }}
         />
       </div>
     </motion.div>

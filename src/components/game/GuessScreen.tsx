@@ -52,9 +52,13 @@ export default function GuessScreen({ players, question, answer, onGuess }: Gues
         <p className="text-sm font-medium text-gray-500 mb-1">Pregunta:</p>
         <p className="text-sm text-gray-700">{question}</p>
       </div>
-      <div className="w-full bg-orange/5 border border-orange/20 rounded-xl p-4 mb-6">
-        <p className="text-sm font-medium text-orange/70 mb-1">Respuesta:</p>
-        <p className="text-sm text-gray-800 italic">&ldquo;{answer}&rdquo;</p>
+      <div className="w-full bg-orange/5 border border-orange/20 rounded-xl overflow-hidden mb-6">
+        <p className="text-sm font-medium text-orange/70 mb-1 px-4 pt-4">Respuesta:</p>
+        {answer.startsWith('data:image') ? (
+          <img src={answer} alt="Dibujo" className="w-full" />
+        ) : (
+          <p className="text-sm text-gray-800 italic px-4 pb-4">&ldquo;{answer}&rdquo;</p>
+        )}
       </div>
 
       <h2 className="text-2xl font-bold text-gray-900 mb-2 text-center">
