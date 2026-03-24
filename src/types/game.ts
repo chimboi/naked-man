@@ -27,8 +27,12 @@ export interface GameState {
   questionsUsed: number[];
   phase: GamePhase;
   currentAnswer: string;
+  answers: Record<string, string>; // playerId -> answer (all players' answers)
   guesses: Record<string, string>; // guesserId -> guessedPlayerId
   roundQuestionCount: number; // 1, 2, or 3 within a round
+  suddenDeath?: boolean; // true when players are tied at 7+
+  suddenDeathPlayerIds?: string[]; // IDs of tied players in sudden death
+  preRoundScores?: Record<string, number>; // scores before sudden death round
 }
 
 export type BroadcastEvent =

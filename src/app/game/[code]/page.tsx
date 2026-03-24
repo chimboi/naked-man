@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, use } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { pickRandomQuestion, pickRandomPlayer, calculateScore } from '@/lib/utils';
+import { pickRandomQuestion, calculateScore } from '@/lib/utils';
 import { questions } from '@/data/questions';
 import type { GameState } from '@/types/game';
 import NakedManReveal from '@/components/game/NakedManReveal';
@@ -14,19 +14,9 @@ import GuessScreen from '@/components/game/GuessScreen';
 import DrawingCanvas from '@/components/game/DrawingCanvas';
 import PersonalResult from '@/components/game/PersonalResult';
 import Scoreboard from '@/components/game/Scoreboard';
+import { motion } from 'framer-motion';
 
 const POLL_INTERVAL = 1000;
-
-function ResultAutoAdvance({ isHost, onAdvance }: { isHost: boolean; onAdvance: () => void }) {
-  useEffect(() => {
-    if (!isHost) return;
-    // Immediate — no delay needed, just trigger on next tick
-    const timer = setTimeout(onAdvance, 100);
-    return () => clearTimeout(timer);
-  }, [isHost, onAdvance]);
-
-  return null;
-}
 
 export default function GamePage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
@@ -36,6 +26,7 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
   const isHost = searchParams.get('host') === 'true';
 
   const [gameState, setGameState] = useState<GameState | null>(null);
+  const [showExitModal, setShowExitModal] = useState(false);
   const lastSyncRef = useRef<string>('');
   const hasJoined = useRef(false);
   const writeCooldown = useRef(false);
@@ -46,6 +37,29 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
 
   const isNakedMan = gameState?.nakedManId === playerId;
   const phase = gameState?.phase || 'lobby';
+  const isGameActive = phase !== 'lobby' && phase !== 'winner';
+
+  // Protect against accidental exit (refresh / close tab)
+  useEffect(() => {
+    if (!isGameActive) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isGameActive]);
+
+  // Protect against back button
+  useEffect(() => {
+    if (!isGameActive) return;
+    window.history.pushState(null, '', window.location.href);
+    const handler = () => {
+      window.history.pushState(null, '', window.location.href);
+      setShowExitModal(true);
+    };
+    window.addEventListener('popstate', handler);
+    return () => window.removeEventListener('popstate', handler);
+  }, [isGameActive]);
 
   // Poll DB for state changes + auto-join if needed
   useEffect(() => {
@@ -111,45 +125,111 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       .update({ state: newState })
       .eq('id', code);
 
-    // Short cooldown — just enough for the write to propagate
     setTimeout(() => { writeCooldown.current = false; }, 300);
   }, [code]);
 
+  // Start round: everyone answers, no nakedMan selected yet
   const startRound = useCallback(() => {
     if (!gameState) return;
-    const nakedManId = pickRandomPlayer(
-      gameState.players.map(p => p.id),
-      gameState.nakedManId ? [gameState.nakedManId] : []
-    );
     const questionIndex = pickRandomQuestion(gameState.questionsUsed, questions.length);
     saveState({
       ...gameState,
-      nakedManId,
+      nakedManId: null,
       currentQuestionIndex: questionIndex,
       questionsUsed: [...gameState.questionsUsed, questionIndex],
-      phase: 'reveal',
+      phase: 'question',
       currentAnswer: '',
+      answers: {},
       guesses: {},
       roundQuestionCount: gameState.currentRound + 1,
       currentRound: gameState.currentRound + 1,
     });
   }, [gameState, saveState]);
 
+  // Player submits answer (concurrent-safe: reads latest state from DB)
+  const handleAnswerSubmit = useCallback(async (answer: string) => {
+    if (!gameState) return;
+
+    const { data } = await supabase
+      .from('game_sessions')
+      .select('state')
+      .eq('id', code)
+      .single();
+
+    const latestState = (data?.state as GameState) || gameState;
+    const newAnswers = { ...latestState.answers, [playerId]: answer };
+    const totalPlayers = latestState.players.length;
+    const allAnswered = Object.keys(newAnswers).length >= totalPlayers;
+
+    if (allAnswered) {
+      // Pick nakedMan from players who actually answered (non-empty)
+      const answeredIds = Object.entries(newAnswers)
+        .filter(([, ans]) => ans && ans.trim() !== '')
+        .map(([id]) => id);
+      const pool = answeredIds.length > 0 ? answeredIds : latestState.players.map(p => p.id);
+      const nakedManId = pool[Math.floor(Math.random() * pool.length)];
+
+      saveState({
+        ...latestState,
+        answers: newAnswers,
+        nakedManId,
+        currentAnswer: newAnswers[nakedManId],
+        phase: 'reveal',
+      });
+    } else {
+      saveState({
+        ...latestState,
+        answers: newAnswers,
+      });
+    }
+  }, [gameState, saveState, playerId, code]);
+
+  // Timeout: auto-submit empty if not answered, host force-advances
+  const handleTimeout = useCallback(async () => {
+    if (!gameState) return;
+
+    // If this player hasn't answered, submit empty
+    if (!gameState.answers?.[playerId]) {
+      await handleAnswerSubmit('');
+      return;
+    }
+
+    // If host, force-advance
+    if (isHost) {
+      const { data } = await supabase
+        .from('game_sessions')
+        .select('state')
+        .eq('id', code)
+        .single();
+      const latestState = (data?.state as GameState) || gameState;
+
+      if (latestState.phase === 'question') {
+        const answeredIds = Object.entries(latestState.answers || {})
+          .filter(([, ans]) => ans && ans.trim() !== '')
+          .map(([id]) => id);
+
+        if (answeredIds.length === 0) {
+          // Nobody answered — skip round
+          saveState({ ...latestState, phase: 'scoreboard', currentAnswer: '' });
+          return;
+        }
+
+        const nakedManId = answeredIds[Math.floor(Math.random() * answeredIds.length)];
+        saveState({
+          ...latestState,
+          nakedManId,
+          currentAnswer: latestState.answers[nakedManId],
+          phase: 'reveal',
+        });
+      }
+    }
+  }, [gameState, saveState, playerId, isHost, code, handleAnswerSubmit]);
+
+  // Reveal done → answer-reveal
   const handleRevealDone = useCallback(() => {
     if (!gameState) return;
-    saveState({ ...gameState, phase: 'question' });
+    saveState({ ...gameState, phase: 'answer-reveal' });
   }, [gameState, saveState]);
-
-  const handleAnswerSubmit = useCallback((answer: string) => {
-    if (!gameState) return;
-    saveState({ ...gameState, currentAnswer: answer, phase: 'answer-reveal' });
-  }, [gameState, saveState]);
-
-  const handleTimeout = useCallback(() => {
-    if (!gameState || !isNakedMan) return;
-    // Skip this round — go directly to next round
-    saveState({ ...gameState, phase: 'scoreboard', currentAnswer: '' });
-  }, [gameState, saveState, isNakedMan]);
 
   const handleProceedToGuess = useCallback(() => {
     if (!gameState) return;
@@ -159,7 +239,6 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
   const handleGuessSubmit = useCallback(async (guessedId: string) => {
     if (!gameState) return;
 
-    // Read latest state from DB to avoid overwriting other players' guesses
     const { data } = await supabase
       .from('game_sessions')
       .select('state')
@@ -171,37 +250,74 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
     const totalGuessers = latestState.players.filter(p => p.id !== latestState.nakedManId).length;
     const allGuessed = Object.keys(newGuesses).length >= totalGuessers;
 
-    saveState({
-      ...latestState,
-      guesses: newGuesses,
-      phase: allGuessed ? 'result' : 'guess',
-    });
+    if (allGuessed) {
+      // Calculate scores immediately when all guesses are in
+      const { nakedManPoints, correctGuessers } = calculateScore(newGuesses, latestState.nakedManId!);
+      const updatedPlayers = latestState.players.map(p => {
+        let bonus = 0;
+        if (p.id === latestState.nakedManId) bonus = nakedManPoints;
+        if (correctGuessers.includes(p.id)) bonus = 1;
+        return { ...p, score: p.score + bonus };
+      });
+
+      saveState({
+        ...latestState,
+        guesses: newGuesses,
+        players: updatedPlayers,
+        phase: 'personal-result',
+      });
+    } else {
+      saveState({
+        ...latestState,
+        guesses: newGuesses,
+      });
+    }
   }, [gameState, saveState, playerId, code]);
 
-  // result → personal-result (calculate scores first)
-  const handleShowPersonalResult = useCallback(() => {
-    if (!gameState) return;
-
-    const { nakedManPoints, correctGuessers } = calculateScore(gameState.guesses, gameState.nakedManId!);
-
-    const updatedPlayers = gameState.players.map(p => {
-      let bonus = 0;
-      if (p.id === gameState.nakedManId) bonus = nakedManPoints;
-      if (correctGuessers.includes(p.id)) bonus = 1;
-      return { ...p, score: p.score + bonus };
-    });
-
-    saveState({ ...gameState, players: updatedPlayers, phase: 'personal-result' });
-  }, [gameState, saveState]);
-
-  // personal-result → scoreboard or winner
+  // personal-result → scoreboard, sudden death, or winner
   const handleShowScoreboard = useCallback(() => {
     if (!gameState) return;
-    const winner = gameState.players.find(p => p.score >= 5);
-    if (winner) {
-      saveState({ ...gameState, phase: 'winner' });
-    } else {
+
+    const playersAtOrAbove7 = gameState.players.filter(p => p.score >= 7);
+
+    if (playersAtOrAbove7.length === 0) {
+      // No one at 7 yet — normal scoreboard
       saveState({ ...gameState, phase: 'scoreboard' });
+    } else if (playersAtOrAbove7.length === 1) {
+      // Clear winner
+      saveState({ ...gameState, phase: 'winner' });
+    } else if (gameState.suddenDeath && gameState.preRoundScores) {
+      // Already in sudden death — check who gained more this round
+      const roundGains = playersAtOrAbove7.map(p => ({
+        id: p.id,
+        gain: p.score - (gameState.preRoundScores![p.id] || 0),
+      }));
+      const maxGain = Math.max(...roundGains.map(r => r.gain));
+      const roundWinners = roundGains.filter(r => r.gain === maxGain);
+
+      if (roundWinners.length === 1) {
+        // Sudden death resolved
+        saveState({ ...gameState, suddenDeath: false, suddenDeathPlayerIds: undefined, preRoundScores: undefined, phase: 'winner' });
+      } else {
+        // Still tied — another sudden death round
+        const tiedIds = roundWinners.map(r => r.id);
+        const scores: Record<string, number> = {};
+        gameState.players.forEach(p => { scores[p.id] = p.score; });
+        saveState({ ...gameState, suddenDeath: true, suddenDeathPlayerIds: tiedIds, preRoundScores: scores, phase: 'scoreboard' });
+      }
+    } else {
+      // Multiple players at 7+ — enter sudden death
+      const maxScore = Math.max(...playersAtOrAbove7.map(p => p.score));
+      const tiedPlayers = gameState.players.filter(p => p.score === maxScore);
+
+      if (tiedPlayers.length === 1) {
+        saveState({ ...gameState, phase: 'winner' });
+      } else {
+        const tiedIds = tiedPlayers.map(p => p.id);
+        const scores: Record<string, number> = {};
+        gameState.players.forEach(p => { scores[p.id] = p.score; });
+        saveState({ ...gameState, suddenDeath: true, suddenDeathPlayerIds: tiedIds, preRoundScores: scores, phase: 'scoreboard' });
+      }
     }
   }, [gameState, saveState]);
 
@@ -215,10 +331,47 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       phase: 'lobby',
       nakedManId: null,
       currentAnswer: '',
+      answers: {},
       guesses: {},
       roundQuestionCount: 0,
+      suddenDeath: false,
+      suddenDeathPlayerIds: undefined,
+      preRoundScores: undefined,
     });
   }, [gameState, saveState]);
+
+  // Exit confirmation modal
+  const exitModal = showExitModal && (
+    <motion.div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+    >
+      <motion.div
+        className="bg-white rounded-2xl p-6 max-w-sm w-full text-center"
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: 'spring', damping: 20 }}
+      >
+        <h3 className="text-xl font-bold text-gray-900 mb-2">Salir del juego?</h3>
+        <p className="text-gray-500 mb-6">Perderas tu progreso en esta partida.</p>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setShowExitModal(false)}
+            className="flex-1 py-3 bg-orange text-white font-semibold rounded-xl active:scale-95 transition-all"
+          >
+            Quedarme
+          </button>
+          <button
+            onClick={() => router.push('/')}
+            className="flex-1 py-3 border-2 border-gray-200 text-gray-500 font-medium rounded-xl active:scale-95 transition-all"
+          >
+            Salir
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
 
   // Lobby / waiting for game to start
   if (!gameState || phase === 'lobby') {
@@ -240,17 +393,15 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
     );
   }
 
+  const answeredCount = Object.keys(gameState.answers || {}).length;
+  const totalPlayers = gameState.players.length;
+  const hasAnswered = !!gameState.answers?.[playerId];
+
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center px-6 py-8">
-      {phase === 'reveal' && (
-        <NakedManReveal
-          isNakedMan={isNakedMan}
-          nakedManName={gameState.players.find(p => p.id === gameState.nakedManId)?.name || ''}
-          onDone={isNakedMan ? handleRevealDone : () => {}}
-        />
-      )}
+      {exitModal}
 
-      {phase === 'question' && isNakedMan && questions[gameState.currentQuestionIndex].type === 'text' && (
+      {phase === 'question' && !hasAnswered && questions[gameState.currentQuestionIndex].type === 'text' && (
         <QuestionDisplay
           question={questions[gameState.currentQuestionIndex].text}
           questionNumber={gameState.roundQuestionCount}
@@ -259,7 +410,7 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
         />
       )}
 
-      {phase === 'question' && isNakedMan && questions[gameState.currentQuestionIndex].type === 'drawing' && (
+      {phase === 'question' && !hasAnswered && questions[gameState.currentQuestionIndex].type === 'drawing' && (
         <DrawingCanvas
           question={questions[gameState.currentQuestionIndex].text}
           questionNumber={gameState.roundQuestionCount}
@@ -268,8 +419,16 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
         />
       )}
 
-      {phase === 'question' && !isNakedMan && (
-        <WaitingScreen message="El Naked Man esta respondiendo..." />
+      {phase === 'question' && hasAnswered && (
+        <WaitingScreen message={`Esperando a los demas... (${answeredCount}/${totalPlayers})`} />
+      )}
+
+      {phase === 'reveal' && (
+        <NakedManReveal
+          isNakedMan={isNakedMan}
+          nakedManName={gameState.players.find(p => p.id === gameState.nakedManId)?.name || ''}
+          onDone={isHost ? handleRevealDone : () => {}}
+        />
       )}
 
       {phase === 'answer-reveal' && (
@@ -295,16 +454,13 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
         <WaitingScreen message="Esperando a que todos adivinen..." />
       )}
 
-      {phase === 'result' && (
-        <ResultAutoAdvance isHost={isHost} onAdvance={handleShowPersonalResult} />
-      )}
-
       {phase === 'personal-result' && (
         <PersonalResult
           players={gameState.players}
           nakedManId={gameState.nakedManId!}
           playerId={playerId}
           guesses={gameState.guesses}
+          autoAdvance={isHost}
           onNext={isHost ? handleShowScoreboard : undefined}
         />
       )}
@@ -312,6 +468,8 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       {phase === 'scoreboard' && (
         <Scoreboard
           players={gameState.players}
+          suddenDeath={gameState.suddenDeath}
+          suddenDeathPlayerIds={gameState.suddenDeathPlayerIds}
           onNextRound={isHost ? startRound : undefined}
         />
       )}
@@ -319,7 +477,7 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       {phase === 'winner' && (
         <Scoreboard
           players={gameState.players}
-          winner={gameState.players.find(p => p.score >= 5)}
+          winner={[...gameState.players].sort((a, b) => b.score - a.score)[0]}
           onPlayAgain={isHost ? handlePlayAgain : undefined}
         />
       )}

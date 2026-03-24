@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 
-const TIME_LIMIT = 15;
+const TIME_LIMIT = 40;
 
 interface DrawingCanvasProps {
   question: string;
@@ -144,9 +144,11 @@ export default function DrawingCanvas({ question, questionNumber, onSubmit, onTi
         />
       </div>
 
-      <h2 className="text-xl font-bold text-gray-900 text-center mb-4 leading-relaxed">
-        {question}
-      </h2>
+      <div className="w-full bg-orange/10 border-2 border-orange/30 rounded-2xl p-4 mb-4">
+        <h2 className="text-xl font-extrabold text-gray-900 text-center leading-relaxed">
+          {question}
+        </h2>
+      </div>
 
       {/* Canvas */}
       <div className="w-full aspect-square bg-white border-2 border-gray-200 rounded-2xl overflow-hidden mb-3 touch-none">

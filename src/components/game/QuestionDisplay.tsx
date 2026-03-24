@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 
-const TIME_LIMIT = 15;
+const TIME_LIMIT = 40;
 
 interface QuestionDisplayProps {
   question: string;
@@ -58,14 +58,16 @@ export default function QuestionDisplay({ question, questionNumber, onSubmit, on
         />
       </div>
 
-      <motion.h2
-        className="text-2xl font-bold text-gray-900 text-center mb-8 leading-relaxed"
+      <motion.div
+        className="w-full bg-orange/10 border-2 border-orange/30 rounded-2xl p-5 mb-8"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.2 }}
       >
-        {question}
-      </motion.h2>
+        <h2 className="text-2xl font-extrabold text-gray-900 text-center leading-relaxed">
+          {question}
+        </h2>
+      </motion.div>
 
       <textarea
         value={answer}

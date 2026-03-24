@@ -63,6 +63,7 @@ export default function CreateGame() {
       questionsUsed: [],
       phase: 'lobby',
       currentAnswer: '',
+      answers: {},
       guesses: {},
       roundQuestionCount: 0,
     };

@@ -1,17 +1,21 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import { useEffect } from 'react';
 import type { Player } from '@/types/game';
+
+const AUTO_ADVANCE_DELAY = 4000;
 
 interface PersonalResultProps {
   players: Player[];
   nakedManId: string;
   playerId: string;
   guesses: Record<string, string>;
+  autoAdvance?: boolean;
   onNext?: () => void;
 }
 
-export default function PersonalResult({ players, nakedManId, playerId, guesses, onNext }: PersonalResultProps) {
+export default function PersonalResult({ players, nakedManId, playerId, guesses, autoAdvance, onNext }: PersonalResultProps) {
   const nakedMan = players.find(p => p.id === nakedManId);
   const isNakedMan = playerId === nakedManId;
 
@@ -20,7 +24,14 @@ export default function PersonalResult({ players, nakedManId, playerId, guesses,
     .map(([guesserId]) => guesserId);
 
   const playerGuessedCorrectly = correctGuessers.includes(playerId);
-  const nakedManPoints = Math.min(correctGuessers.length, 2);
+  const nakedManPoints = Math.min(correctGuessers.length, 3);
+
+  // Auto-advance to scoreboard after delay
+  useEffect(() => {
+    if (!autoAdvance || !onNext) return;
+    const timer = setTimeout(onNext, AUTO_ADVANCE_DELAY);
+    return () => clearTimeout(timer);
+  }, [autoAdvance, onNext]);
 
   return (
     <motion.div
@@ -90,14 +101,14 @@ export default function PersonalResult({ players, nakedManId, playerId, guesses,
         )}
       </motion.div>
 
-      {onNext && (
-        <button
-          onClick={onNext}
-          className="w-full py-4 bg-orange text-white font-semibold text-lg rounded-xl active:scale-95 transition-all"
-        >
-          Ver resultados
-        </button>
-      )}
+      <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+        <motion.div
+          className="h-full bg-orange rounded-full"
+          initial={{ width: '100%' }}
+          animate={{ width: '0%' }}
+          transition={{ duration: AUTO_ADVANCE_DELAY / 1000, ease: 'linear' }}
+        />
+      </div>
     </motion.div>
   );
 }

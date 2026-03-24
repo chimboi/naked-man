@@ -89,53 +89,88 @@ export default function Home() {
           transition={{ delay: 0.8 }}
         >
           <button
-            onClick={() => setShowRules(!showRules)}
-            className="text-white/70 text-sm font-medium hover:text-white transition-colors mb-4"
+            onClick={() => setShowRules(true)}
+            className="text-white/70 text-sm font-medium hover:text-white transition-colors"
           >
-            {showRules ? 'Ocultar instrucciones' : 'Como se juega?'}
+            Como se juega?
           </button>
-
-          {showRules && (
-            <motion.div
-              className="w-full bg-white/15 backdrop-blur-sm rounded-2xl p-6 text-left space-y-4"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              transition={{ duration: 0.3 }}
-            >
-              <div className="flex gap-3">
-                <span className="text-white/90 font-bold text-lg shrink-0">1.</span>
-                <p className="text-white/90 text-sm">
-                  Crea un juego e invita a tus amigos (3 a 5 jugadores). Comparte el codigo para que se unan.
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <span className="text-white/90 font-bold text-lg shrink-0">2.</span>
-                <p className="text-white/90 text-sm">
-                  Cada ronda se elige un <strong>Naked Man</strong> al azar. Solo el sabe que fue elegido.
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <span className="text-white/90 font-bold text-lg shrink-0">3.</span>
-                <p className="text-white/90 text-sm">
-                  El Naked Man responde una pregunta personal de forma anonima. Se vale ser vulnerable y autentico.
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <span className="text-white/90 font-bold text-lg shrink-0">4.</span>
-                <p className="text-white/90 text-sm">
-                  Todos ven la respuesta y adivinan quien es el Naked Man. Si adivinan, ganan 1 punto. El Naked Man gana 1 punto por cada persona que lo adivine (max 2).
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <span className="text-white/90 font-bold text-lg shrink-0">5.</span>
-                <p className="text-white/90 text-sm">
-                  El primero en llegar a <strong>5 puntos</strong> gana. Gana el mas vulnerable y autentico.
-                </p>
-              </div>
-            </motion.div>
-          )}
         </motion.div>
+
+        {/* Credits */}
+        <motion.a
+          href="https://www.instagram.com/eliashuarte/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-16 text-white/70 text-sm font-medium hover:text-white transition-colors underline underline-offset-4 decoration-white/40 hover:decoration-white"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1 }}
+        >
+          Hecho con 🧡
+        </motion.a>
       </motion.div>
+
+      {/* Rules Modal */}
+      {showRules && (
+        <motion.div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          onClick={() => setShowRules(false)}
+        >
+          <motion.div
+            className="bg-white rounded-3xl p-8 max-w-sm w-full"
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: 'spring', damping: 20 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-2xl font-extrabold text-gray-900 text-center mb-6">
+              Como se juega?
+            </h2>
+
+            <div className="space-y-5 mb-8">
+              <div className="flex gap-4 items-start">
+                <span className="w-8 h-8 rounded-full bg-orange text-white font-bold text-sm flex items-center justify-center shrink-0">1</span>
+                <p className="text-sm text-gray-700 leading-relaxed">
+                  Crea un juego e invita a tus amigos <strong>(3 a 5 jugadores)</strong>. Comparte el codigo para que se unan.
+                </p>
+              </div>
+              <div className="flex gap-4 items-start">
+                <span className="w-8 h-8 rounded-full bg-orange text-white font-bold text-sm flex items-center justify-center shrink-0">2</span>
+                <p className="text-sm text-gray-700 leading-relaxed">
+                  Cada ronda, <strong>todos responden</strong> la misma pregunta personal. Se vale ser vulnerable y autentico.
+                </p>
+              </div>
+              <div className="flex gap-4 items-start">
+                <span className="w-8 h-8 rounded-full bg-orange text-white font-bold text-sm flex items-center justify-center shrink-0">3</span>
+                <p className="text-sm text-gray-700 leading-relaxed">
+                  Se elige una respuesta al azar como la del <strong>Naked Man</strong>. Solo el sabe que fue elegido.
+                </p>
+              </div>
+              <div className="flex gap-4 items-start">
+                <span className="w-8 h-8 rounded-full bg-orange text-white font-bold text-sm flex items-center justify-center shrink-0">4</span>
+                <p className="text-sm text-gray-700 leading-relaxed">
+                  Todos ven la respuesta y adivinan quien la escribio. Si adivinan, <strong>ganan 1 punto</strong>. El Naked Man gana 1 punto por cada persona que lo adivine <strong>(max 3)</strong>.
+                </p>
+              </div>
+              <div className="flex gap-4 items-start">
+                <span className="w-8 h-8 rounded-full bg-orange text-white font-bold text-sm flex items-center justify-center shrink-0">5</span>
+                <p className="text-sm text-gray-700 leading-relaxed">
+                  El primero en llegar a <strong>7 puntos</strong> gana. Gana el mas vulnerable y autentico.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowRules(false)}
+              className="w-full py-3 bg-orange text-white font-semibold rounded-xl active:scale-95 transition-all"
+            >
+              Entendido!
+            </button>
+          </motion.div>
+        </motion.div>
+      )}
 
       {showJoinModal && (
         <JoinGameModal onClose={() => setShowJoinModal(false)} />

@@ -34,11 +34,11 @@ export function calculateScore(
   nakedManId: string,
 ): { nakedManPoints: number; correctGuessers: string[] } {
   const correctGuessers = Object.entries(guesses)
-    .filter(([, guessedId]) => guessedId === nakedManId)
+    .filter(([guesserId, guessedId]) => guesserId !== nakedManId && guessedId === nakedManId)
     .map(([guesserId]) => guesserId);
 
   return {
-    nakedManPoints: Math.min(correctGuessers.length, 2), // max 2 points
+    nakedManPoints: Math.min(correctGuessers.length, 3), // max 3 points
     correctGuessers, // each correct guesser gets 1 point
   };
 }

@@ -17,6 +17,13 @@ export default function NakedManReveal({ isNakedMan, nakedManName, onDone }: Nak
     return () => clearTimeout(timer);
   }, []);
 
+  // Auto-advance after reveal is shown (no button needed)
+  useEffect(() => {
+    if (!showReveal) return;
+    const timer = setTimeout(onDone, 3000);
+    return () => clearTimeout(timer);
+  }, [showReveal, onDone]);
+
   return (
     <motion.div
       className="flex flex-col items-center text-center w-full max-w-sm"
@@ -67,23 +74,13 @@ export default function NakedManReveal({ isNakedMan, nakedManName, onDone }: Nak
             </motion.h1>
 
             <motion.p
-              className="text-gray-500 mb-8"
+              className="text-gray-500"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5 }}
             >
-              Responde con honestidad, nadie sabra que eres tu
+              Nadie sabra que eres tu...
             </motion.p>
-
-            <motion.button
-              onClick={onDone}
-              className="w-full py-4 bg-orange text-white font-semibold text-lg rounded-xl active:scale-95 transition-all"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.7 }}
-            >
-              Estoy listo
-            </motion.button>
           </motion.div>
         ) : (
           <motion.div
