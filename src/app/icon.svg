@@ -1,0 +1,44 @@
+<svg viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Rounded background -->
+  <rect width="512" height="512" rx="96" fill="#D77C24"/>
+
+  <g transform="translate(76, 16) scale(1.5)">
+    <!-- Head -->
+    <ellipse cx="120" cy="42" rx="18" ry="20" stroke="white" stroke-width="8" fill="none"/>
+
+    <!-- Neck -->
+    <line x1="120" y1="62" x2="120" y2="72" stroke="white" stroke-width="8" stroke-linecap="round"/>
+
+    <!-- Torso -->
+    <path d="M 106 72 L 102 134 L 120 140 L 138 134 L 134 72 Z" stroke="white" stroke-width="7" fill="none" stroke-linejoin="round"/>
+
+    <!-- Shoulders -->
+    <path d="M 106 72 Q 98 70 86 76" stroke="white" stroke-width="8" fill="none" stroke-linecap="round"/>
+    <path d="M 134 72 Q 142 70 154 76" stroke="white" stroke-width="8" fill="none" stroke-linecap="round"/>
+
+    <!-- Arms raised -->
+    <path d="M 86 76 L 52 50 L 30 30" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 154 76 L 188 50 L 210 30" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Arms horizontal (ghost) -->
+    <path d="M 86 76 L 48 88 L 14 94" stroke="white" stroke-width="6" stroke-linecap="round" opacity="0.35"/>
+    <path d="M 154 76 L 192 88 L 226 94" stroke="white" stroke-width="6" stroke-linecap="round" opacity="0.35"/>
+
+    <!-- Hips -->
+    <path d="M 102 134 Q 111 143 120 145 Q 129 143 138 134" stroke="white" stroke-width="7" fill="none"/>
+
+    <!-- Legs straight -->
+    <path d="M 110 145 L 98 182 L 88 220" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 88 220 L 76 223" stroke="white" stroke-width="7" stroke-linecap="round"/>
+    <path d="M 130 145 L 142 182 L 152 220" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 152 220 L 164 223" stroke="white" stroke-width="7" stroke-linecap="round"/>
+
+    <!-- Legs spread (ghost) -->
+    <path d="M 110 145 L 74 185 L 48 215" stroke="white" stroke-width="6" stroke-linecap="round" opacity="0.35"/>
+    <path d="M 130 145 L 166 185 L 192 215" stroke="white" stroke-width="6" stroke-linecap="round" opacity="0.35"/>
+
+    <!-- Question mark cover -->
+    <circle cx="120" cy="154" r="24" fill="#C06A15" stroke="white" stroke-width="7"/>
+    <text x="120" y="164" text-anchor="middle" fill="white" font-size="32" font-weight="bold" font-family="sans-serif">?</text>
+  </g>
+</svg>
