@@ -17,11 +17,21 @@ export function getPlayerId(): string {
   return id;
 }
 
-export function pickRandomQuestion(usedIndices: number[], totalQuestions: number): number {
-  const available = Array.from({ length: totalQuestions }, (_, i) => i)
-    .filter(i => !usedIndices.includes(i));
-  if (available.length === 0) return Math.floor(Math.random() * totalQuestions);
-  return available[Math.floor(Math.random() * available.length)];
+export function pickRandomQuestion(
+  usedIndices: number[],
+  questions: { type: 'text' | 'drawing' }[],
+  preferredType?: 'text' | 'drawing',
+): number {
+  const allIndices = Array.from({ length: questions.length }, (_, i) => i);
+  const available = allIndices.filter(i => !usedIndices.includes(i));
+
+  if (preferredType) {
+    const filtered = available.filter(i => questions[i].type === preferredType);
+    if (filtered.length > 0) return filtered[Math.floor(Math.random() * filtered.length)];
+  }
+
+  if (available.length > 0) return available[Math.floor(Math.random() * available.length)];
+  return Math.floor(Math.random() * questions.length);
 }
 
 export function pickRandomPlayer(playerIds: string[], excludeIds: string[] = []): string {

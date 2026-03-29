@@ -133,7 +133,7 @@ export default function Home() {
               <div className="flex gap-4 items-start">
                 <span className="w-8 h-8 rounded-full bg-orange text-white font-bold text-sm flex items-center justify-center shrink-0">1</span>
                 <p className="text-sm text-gray-700 leading-relaxed">
-                  Crea un juego e invita a tus amigos <strong>(3 a 5 jugadores)</strong>. Comparte el codigo para que se unan.
+                  Crea un juego e invita a tus amigos <strong>(3 a 7 jugadores)</strong>. Comparte el codigo para que se unan.
                 </p>
               </div>
               <div className="flex gap-4 items-start">

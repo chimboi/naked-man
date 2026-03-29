@@ -77,7 +77,7 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       const state = data.state as GameState;
 
       // Auto-join: if this player is not in the list yet, add them
-      if (!hasJoined.current && !isHost && playerName && state.players.length < 5 && !state.players.some(p => p.id === playerId)) {
+      if (!hasJoined.current && !isHost && playerName && state.players.length < 7 && !state.players.some(p => p.id === playerId)) {
         hasJoined.current = true;
         const updatedState = {
           ...state,
@@ -131,7 +131,8 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
   // Start round: everyone answers, no nakedMan selected yet
   const startRound = useCallback(() => {
     if (!gameState) return;
-    const questionIndex = pickRandomQuestion(gameState.questionsUsed, questions.length);
+    const preferredType = Math.random() < 0.75 ? 'text' : 'drawing';
+    const questionIndex = pickRandomQuestion(gameState.questionsUsed, questions, preferredType);
     saveState({
       ...gameState,
       nakedManId: null,

@@ -153,7 +153,7 @@ export default function CreateGame() {
           Comparte este codigo con tus amigos
         </h1>
         <p className="text-gray-500 text-center mb-8">
-          De 3 a 5 jugadores para iniciar
+          De 3 a 7 jugadores para iniciar
         </p>
 
         {/* Session Code */}
@@ -204,13 +204,13 @@ export default function CreateGame() {
         {/* Start Button */}
         <button
           onClick={startGame}
-          disabled={players.length < 3 || players.length > 5}
+          disabled={players.length < 3 || players.length > 7}
           className="w-full py-4 bg-orange text-white font-semibold text-lg rounded-xl hover:bg-orange-dark active:scale-95 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {players.length < 3
             ? `Faltan ${3 - players.length} jugador${3 - players.length > 1 ? 'es' : ''}`
             : players.length > 5
-            ? 'Maximo 5 jugadores'
+            ? 'Maximo 7 jugadores'
             : 'Iniciar juego'}
         </button>
       </motion.div>
