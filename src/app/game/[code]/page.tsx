@@ -102,6 +102,34 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       // Skip poll updates during write cooldown to prevent flickering
       if (writeCooldown.current) return;
 
+      // Preserve local answer/guess if we already submitted but a concurrent
+      // write from another player overwrote our data in the DB.
+      // Also re-write to DB so the server count is correct.
+      let needsRewrite = false;
+      if (isSubmittingAnswer.current && state.phase === 'question' && !state.answers?.[playerId]) {
+        const localAnswer = gameState?.answers?.[playerId];
+        if (localAnswer !== undefined) {
+          state.answers = { ...state.answers, [playerId]: localAnswer };
+          needsRewrite = true;
+        }
+      }
+      if (isSubmittingGuess.current && state.phase === 'guess' && !state.guesses?.[playerId]) {
+        const localGuess = gameState?.guesses?.[playerId];
+        if (localGuess !== undefined) {
+          state.guesses = { ...state.guesses, [playerId]: localGuess };
+          needsRewrite = true;
+        }
+      }
+      if (needsRewrite) {
+        // Re-persist our answer/guess that was lost to the race condition
+        writeCooldown.current = true;
+        await supabase
+          .from('game_sessions')
+          .update({ state })
+          .eq('id', code);
+        setTimeout(() => { writeCooldown.current = false; }, 300);
+      }
+
       const stateStr = JSON.stringify(state);
       if (stateStr !== lastSyncRef.current) {
         lastSyncRef.current = stateStr;
