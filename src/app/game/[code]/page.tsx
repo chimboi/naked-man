@@ -104,28 +104,6 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       // Skip poll updates during write cooldown to prevent flickering
       if (writeCooldown.current) return;
 
-      // Preserve local answer/guess if we already submitted but a concurrent
-      // write from another player overwrote our data in the DB.
-      // Uses refs (not state) because this effect closure doesn't track gameState.
-      let needsRewrite = false;
-      if (isSubmittingAnswer.current && state.phase === 'question' && !state.answers?.[playerId] && submittedAnswerRef.current !== null) {
-        state.answers = { ...state.answers, [playerId]: submittedAnswerRef.current };
-        needsRewrite = true;
-      }
-      if (isSubmittingGuess.current && state.phase === 'guess' && !state.guesses?.[playerId] && submittedGuessRef.current !== null) {
-        state.guesses = { ...state.guesses, [playerId]: submittedGuessRef.current };
-        needsRewrite = true;
-      }
-      if (needsRewrite) {
-        // Re-persist our answer/guess that was lost to the race condition
-        writeCooldown.current = true;
-        await supabase
-          .from('game_sessions')
-          .update({ state })
-          .eq('id', code);
-        setTimeout(() => { writeCooldown.current = false; }, 300);
-      }
-
       const stateStr = JSON.stringify(state);
       if (stateStr !== lastSyncRef.current) {
         lastSyncRef.current = stateStr;
@@ -183,33 +161,36 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
     });
   }, [gameState, saveState]);
 
-  // Player submits answer (concurrent-safe: reads latest state from DB)
+  // Player submits answer (atomic via Supabase RPC — no race conditions)
   const handleAnswerSubmit = useCallback(async (answer: string) => {
     if (!gameState || gameState.phase !== 'question') return;
     if (isSubmittingAnswer.current) return;
     isSubmittingAnswer.current = true;
     submittedAnswerRef.current = answer;
 
-    const { data } = await supabase
-      .from('game_sessions')
-      .select('state')
-      .eq('id', code)
-      .single();
+    // Atomic write: the DB function locks the row, adds our answer, returns latest state
+    const { data, error } = await supabase.rpc('submit_answer', {
+      p_session_id: code,
+      p_player_id: playerId,
+      p_answer: answer,
+    });
 
-    const latestState = (data?.state as GameState) || gameState;
+    if (error || !data) return;
+    const latestState = data as unknown as GameState;
 
-    // Another player already triggered phase transition
-    if (latestState.phase !== 'question') return;
-    // This player already has an answer in DB (e.g. timeout + manual submit race)
-    if (latestState.answers?.[playerId]) return;
+    // Phase already changed (someone else triggered transition) — just sync local
+    if (latestState.phase !== 'question') {
+      lastSyncRef.current = JSON.stringify(latestState);
+      setGameState(latestState);
+      return;
+    }
 
-    const newAnswers = { ...latestState.answers, [playerId]: answer };
     const totalPlayers = latestState.players.length;
-    const allAnswered = Object.keys(newAnswers).length >= totalPlayers;
+    const allAnswered = Object.keys(latestState.answers || {}).length >= totalPlayers;
 
-    if (allAnswered && latestState.phase === 'question') {
+    if (allAnswered) {
       // Pick nakedMan from players who actually answered (non-empty)
-      const answeredIds = Object.entries(newAnswers)
+      const answeredIds = Object.entries(latestState.answers)
         .filter(([, ans]) => ans && ans.trim() !== '')
         .map(([id]) => id);
       const pool = answeredIds.length > 0 ? answeredIds : latestState.players.map(p => p.id);
@@ -217,16 +198,14 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
 
       saveState({
         ...latestState,
-        answers: newAnswers,
         nakedManId,
-        currentAnswer: newAnswers[nakedManId],
+        currentAnswer: latestState.answers[nakedManId],
         phase: 'reveal',
       });
     } else {
-      saveState({
-        ...latestState,
-        answers: newAnswers,
-      });
+      // Answer is already persisted by the RPC — just update local state
+      lastSyncRef.current = JSON.stringify(latestState);
+      setGameState(latestState);
     }
   }, [gameState, saveState, playerId, code]);
 
@@ -283,32 +262,35 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
     saveState({ ...gameState, phase: 'guess' });
   }, [gameState, saveState]);
 
+  // Player submits guess (atomic via Supabase RPC — no race conditions)
   const handleGuessSubmit = useCallback(async (guessedId: string) => {
     if (!gameState || gameState.phase !== 'guess') return;
     if (isSubmittingGuess.current) return;
     isSubmittingGuess.current = true;
     submittedGuessRef.current = guessedId;
 
-    const { data } = await supabase
-      .from('game_sessions')
-      .select('state')
-      .eq('id', code)
-      .single();
+    // Atomic write: the DB function locks the row, adds our guess, returns latest state
+    const { data, error } = await supabase.rpc('submit_guess', {
+      p_session_id: code,
+      p_player_id: playerId,
+      p_guessed_id: guessedId,
+    });
 
-    const latestState = (data?.state as GameState) || gameState;
+    if (error || !data) return;
+    const latestState = data as unknown as GameState;
 
-    // Another player already triggered phase transition
-    if (latestState.phase !== 'guess') return;
-    // This player already guessed in DB
-    if (latestState.guesses?.[playerId]) return;
+    // Phase already changed — just sync local
+    if (latestState.phase !== 'guess') {
+      lastSyncRef.current = JSON.stringify(latestState);
+      setGameState(latestState);
+      return;
+    }
 
-    const newGuesses = { ...latestState.guesses, [playerId]: guessedId };
     const totalGuessers = latestState.players.filter(p => p.id !== latestState.nakedManId).length;
-    const allGuessed = Object.keys(newGuesses).length >= totalGuessers;
+    const allGuessed = Object.keys(latestState.guesses || {}).length >= totalGuessers;
 
-    if (allGuessed && latestState.phase === 'guess') {
-      // Calculate scores immediately when all guesses are in
-      const { nakedManPoints, correctGuessers } = calculateScore(newGuesses, latestState.nakedManId!);
+    if (allGuessed) {
+      const { nakedManPoints, correctGuessers } = calculateScore(latestState.guesses, latestState.nakedManId!);
       const updatedPlayers = latestState.players.map(p => {
         let bonus = 0;
         if (p.id === latestState.nakedManId) bonus = nakedManPoints;
@@ -318,15 +300,13 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
 
       saveState({
         ...latestState,
-        guesses: newGuesses,
         players: updatedPlayers,
         phase: 'personal-result',
       });
     } else {
-      saveState({
-        ...latestState,
-        guesses: newGuesses,
-      });
+      // Guess is already persisted by the RPC — just update local state
+      lastSyncRef.current = JSON.stringify(latestState);
+      setGameState(latestState);
     }
   }, [gameState, saveState, playerId, code]);
 
