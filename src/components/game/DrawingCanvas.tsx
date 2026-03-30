@@ -18,6 +18,7 @@ export default function DrawingCanvas({ question, questionNumber, onSubmit, onTi
   const lastPos = useRef({ x: 0, y: 0 });
   const [hasDrawn, setHasDrawn] = useState(false);
   const [timeLeft, setTimeLeft] = useState(TIME_LIMIT);
+  const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
     if (timeLeft <= 0) {
@@ -108,10 +109,11 @@ export default function DrawingCanvas({ question, questionNumber, onSubmit, onTi
 
   const handleSubmit = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !hasDrawn) return;
+    if (!canvas || !hasDrawn || submitted) return;
+    setSubmitted(true);
     const dataUrl = canvas.toDataURL('image/webp', 0.6);
     onSubmit(dataUrl);
-  }, [hasDrawn, onSubmit]);
+  }, [hasDrawn, onSubmit, submitted]);
 
   return (
     <motion.div
@@ -174,7 +176,7 @@ export default function DrawingCanvas({ question, questionNumber, onSubmit, onTi
         </button>
         <button
           onClick={handleSubmit}
-          disabled={!hasDrawn}
+          disabled={!hasDrawn || submitted}
           className="flex-1 py-3 bg-orange text-white font-semibold rounded-xl active:scale-95 transition-all disabled:opacity-40"
         >
           Enviar dibujo

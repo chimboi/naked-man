@@ -15,6 +15,7 @@ interface QuestionDisplayProps {
 export default function QuestionDisplay({ question, questionNumber, onSubmit, onTimeout }: QuestionDisplayProps) {
   const [answer, setAnswer] = useState('');
   const [timeLeft, setTimeLeft] = useState(TIME_LIMIT);
+  const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
     if (timeLeft <= 0) {
@@ -26,7 +27,8 @@ export default function QuestionDisplay({ question, questionNumber, onSubmit, on
   }, [timeLeft, onTimeout]);
 
   const handleSubmit = () => {
-    if (!answer.trim()) return;
+    if (!answer.trim() || submitted) return;
+    setSubmitted(true);
     onSubmit(answer.trim());
   };
 
@@ -83,7 +85,7 @@ export default function QuestionDisplay({ question, questionNumber, onSubmit, on
 
       <button
         onClick={handleSubmit}
-        disabled={!answer.trim()}
+        disabled={!answer.trim() || submitted}
         className="w-full py-4 bg-orange text-white font-semibold text-lg rounded-xl hover:bg-orange-dark active:scale-95 transition-all duration-200 disabled:opacity-40"
       >
         Enviar respuesta

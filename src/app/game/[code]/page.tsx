@@ -30,6 +30,8 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
   const lastSyncRef = useRef<string>('');
   const hasJoined = useRef(false);
   const writeCooldown = useRef(false);
+  const isSubmittingAnswer = useRef(false);
+  const isSubmittingGuess = useRef(false);
 
   const playerName = typeof window !== 'undefined'
     ? localStorage.getItem('nakedman_player_name') || ''
@@ -112,6 +114,14 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
     return () => clearInterval(interval);
   }, [code, playerId, isHost, playerName]);
 
+  // Reset submission guards when a new round starts
+  useEffect(() => {
+    if (phase === 'question') {
+      isSubmittingAnswer.current = false;
+      isSubmittingGuess.current = false;
+    }
+  }, [phase]);
+
   // Helper: save state to DB and update local
   const saveState = useCallback(async (newState: GameState) => {
     writeCooldown.current = true;
@@ -149,7 +159,9 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
 
   // Player submits answer (concurrent-safe: reads latest state from DB)
   const handleAnswerSubmit = useCallback(async (answer: string) => {
-    if (!gameState) return;
+    if (!gameState || gameState.phase !== 'question') return;
+    if (isSubmittingAnswer.current) return;
+    isSubmittingAnswer.current = true;
 
     const { data } = await supabase
       .from('game_sessions')
@@ -158,11 +170,17 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       .single();
 
     const latestState = (data?.state as GameState) || gameState;
+
+    // Another player already triggered phase transition
+    if (latestState.phase !== 'question') return;
+    // This player already has an answer in DB (e.g. timeout + manual submit race)
+    if (latestState.answers?.[playerId]) return;
+
     const newAnswers = { ...latestState.answers, [playerId]: answer };
     const totalPlayers = latestState.players.length;
     const allAnswered = Object.keys(newAnswers).length >= totalPlayers;
 
-    if (allAnswered) {
+    if (allAnswered && latestState.phase === 'question') {
       // Pick nakedMan from players who actually answered (non-empty)
       const answeredIds = Object.entries(newAnswers)
         .filter(([, ans]) => ans && ans.trim() !== '')
@@ -188,6 +206,7 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
   // Timeout: auto-submit empty if not answered, host force-advances
   const handleTimeout = useCallback(async () => {
     if (!gameState) return;
+    if (isSubmittingAnswer.current) return;
 
     // If this player hasn't answered, submit empty
     if (!gameState.answers?.[playerId]) {
@@ -228,17 +247,19 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
 
   // Reveal done → answer-reveal
   const handleRevealDone = useCallback(() => {
-    if (!gameState) return;
+    if (!gameState || gameState.phase !== 'reveal') return;
     saveState({ ...gameState, phase: 'answer-reveal' });
   }, [gameState, saveState]);
 
   const handleProceedToGuess = useCallback(() => {
-    if (!gameState) return;
+    if (!gameState || gameState.phase !== 'answer-reveal') return;
     saveState({ ...gameState, phase: 'guess' });
   }, [gameState, saveState]);
 
   const handleGuessSubmit = useCallback(async (guessedId: string) => {
-    if (!gameState) return;
+    if (!gameState || gameState.phase !== 'guess') return;
+    if (isSubmittingGuess.current) return;
+    isSubmittingGuess.current = true;
 
     const { data } = await supabase
       .from('game_sessions')
@@ -247,11 +268,17 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       .single();
 
     const latestState = (data?.state as GameState) || gameState;
+
+    // Another player already triggered phase transition
+    if (latestState.phase !== 'guess') return;
+    // This player already guessed in DB
+    if (latestState.guesses?.[playerId]) return;
+
     const newGuesses = { ...latestState.guesses, [playerId]: guessedId };
     const totalGuessers = latestState.players.filter(p => p.id !== latestState.nakedManId).length;
     const allGuessed = Object.keys(newGuesses).length >= totalGuessers;
 
-    if (allGuessed) {
+    if (allGuessed && latestState.phase === 'guess') {
       // Calculate scores immediately when all guesses are in
       const { nakedManPoints, correctGuessers } = calculateScore(newGuesses, latestState.nakedManId!);
       const updatedPlayers = latestState.players.map(p => {
@@ -274,6 +301,37 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       });
     }
   }, [gameState, saveState, playerId, code]);
+
+  // Host force-advances guess phase after 30s if not all guesses are in
+  useEffect(() => {
+    if (!isHost || phase !== 'guess' || !gameState) return;
+    const timer = setTimeout(async () => {
+      const { data } = await supabase
+        .from('game_sessions')
+        .select('state')
+        .eq('id', code)
+        .single();
+      const latestState = (data?.state as GameState) || gameState;
+      if (latestState.phase !== 'guess') return;
+
+      const guesses = latestState.guesses || {};
+      const { nakedManPoints, correctGuessers } = calculateScore(guesses, latestState.nakedManId!);
+      const updatedPlayers = latestState.players.map(p => {
+        let bonus = 0;
+        if (p.id === latestState.nakedManId) bonus = nakedManPoints;
+        if (correctGuessers.includes(p.id)) bonus = 1;
+        return { ...p, score: p.score + bonus };
+      });
+
+      saveState({
+        ...latestState,
+        guesses,
+        players: updatedPlayers,
+        phase: 'personal-result',
+      });
+    }, 30000);
+    return () => clearTimeout(timer);
+  }, [isHost, phase, gameState, code, saveState]);
 
   // personal-result → scoreboard, sudden death, or winner
   const handleShowScoreboard = useCallback(() => {
