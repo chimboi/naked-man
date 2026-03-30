@@ -32,6 +32,8 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
   const writeCooldown = useRef(false);
   const isSubmittingAnswer = useRef(false);
   const isSubmittingGuess = useRef(false);
+  const submittedAnswerRef = useRef<string | null>(null);
+  const submittedGuessRef = useRef<string | null>(null);
 
   const playerName = typeof window !== 'undefined'
     ? localStorage.getItem('nakedman_player_name') || ''
@@ -104,21 +106,15 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
 
       // Preserve local answer/guess if we already submitted but a concurrent
       // write from another player overwrote our data in the DB.
-      // Also re-write to DB so the server count is correct.
+      // Uses refs (not state) because this effect closure doesn't track gameState.
       let needsRewrite = false;
-      if (isSubmittingAnswer.current && state.phase === 'question' && !state.answers?.[playerId]) {
-        const localAnswer = gameState?.answers?.[playerId];
-        if (localAnswer !== undefined) {
-          state.answers = { ...state.answers, [playerId]: localAnswer };
-          needsRewrite = true;
-        }
+      if (isSubmittingAnswer.current && state.phase === 'question' && !state.answers?.[playerId] && submittedAnswerRef.current !== null) {
+        state.answers = { ...state.answers, [playerId]: submittedAnswerRef.current };
+        needsRewrite = true;
       }
-      if (isSubmittingGuess.current && state.phase === 'guess' && !state.guesses?.[playerId]) {
-        const localGuess = gameState?.guesses?.[playerId];
-        if (localGuess !== undefined) {
-          state.guesses = { ...state.guesses, [playerId]: localGuess };
-          needsRewrite = true;
-        }
+      if (isSubmittingGuess.current && state.phase === 'guess' && !state.guesses?.[playerId] && submittedGuessRef.current !== null) {
+        state.guesses = { ...state.guesses, [playerId]: submittedGuessRef.current };
+        needsRewrite = true;
       }
       if (needsRewrite) {
         // Re-persist our answer/guess that was lost to the race condition
@@ -147,6 +143,8 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
     if (phase === 'question') {
       isSubmittingAnswer.current = false;
       isSubmittingGuess.current = false;
+      submittedAnswerRef.current = null;
+      submittedGuessRef.current = null;
     }
   }, [phase]);
 
@@ -190,6 +188,7 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
     if (!gameState || gameState.phase !== 'question') return;
     if (isSubmittingAnswer.current) return;
     isSubmittingAnswer.current = true;
+    submittedAnswerRef.current = answer;
 
     const { data } = await supabase
       .from('game_sessions')
@@ -288,6 +287,7 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
     if (!gameState || gameState.phase !== 'guess') return;
     if (isSubmittingGuess.current) return;
     isSubmittingGuess.current = true;
+    submittedGuessRef.current = guessedId;
 
     const { data } = await supabase
       .from('game_sessions')
@@ -460,8 +460,22 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
     </motion.div>
   );
 
+  // Loading state while fetching initial game state
+  if (!gameState) {
+    return (
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center px-6">
+        <motion.div
+          className="w-12 h-12 border-4 border-gray-200 border-t-orange rounded-full"
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+        />
+        <p className="text-gray-400 mt-4 text-sm">Conectando al juego...</p>
+      </div>
+    );
+  }
+
   // Lobby / waiting for game to start
-  if (!gameState || phase === 'lobby') {
+  if (phase === 'lobby') {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center px-6 relative">
         <button
