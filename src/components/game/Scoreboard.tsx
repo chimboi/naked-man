@@ -106,7 +106,7 @@ export default function Scoreboard({ players, winner, suddenDeath, suddenDeathPl
         })}
       </div>
 
-      {onNextRound && (
+      {onNextRound ? (
         <button
           onClick={onNextRound}
           className={`w-full py-4 text-white font-semibold text-lg rounded-xl active:scale-95 transition-all ${
@@ -115,15 +115,19 @@ export default function Scoreboard({ players, winner, suddenDeath, suddenDeathPl
         >
           {suddenDeath ? 'Muerte subita!' : 'Siguiente ronda'}
         </button>
+      ) : !winner && (
+        <p className="text-gray-400 text-sm animate-pulse">Esperando a que el host inicie la siguiente ronda...</p>
       )}
 
-      {onPlayAgain && (
+      {onPlayAgain ? (
         <button
           onClick={onPlayAgain}
           className="w-full py-4 bg-orange text-white font-semibold text-lg rounded-xl active:scale-95 transition-all"
         >
           Jugar de nuevo
         </button>
+      ) : winner && (
+        <p className="text-gray-400 text-sm animate-pulse">Esperando a que el host inicie un nuevo juego...</p>
       )}
     </motion.div>
   );
